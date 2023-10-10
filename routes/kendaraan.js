@@ -101,44 +101,69 @@ router.get("/:no_pol", (req, res) => {
 });
 
 
-  // Endpoint untuk mengupdate kendaraan berdasarkan no_pol
-router.patch("/update/:no_pol", upload.single("gambar_kendaraan"), (req, res) => {
-    const no_pol = req.params.no_pol;
-    const { nama_kendaraan, id_transmisi } = req.body;
-    let gambar_kendaraan = req.file ? req.file.filename : null;
-  
-    // Pastikan data yang akan diupdate valid
-    if (!nama_kendaraan || !id_transmisi) {
-      return res.status(400).json({
-        status: false,
-        message: "Nama Kendaraan dan ID Transmisi harus diisi",
+router.patch(
+  "/update/:no_pol",
+  upload.single("gambar_kendaraan"),
+  [
+    body("nama_kendaraan").notEmpty(),
+    body("id_transmisi").notEmpty(),
+  ],
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({
+        errors: errors.array(),
       });
     }
-    connection.query(
-      "UPDATE kendaraan SET nama_kendaraan = ?, id_transmisi = ?, gambar_kendaraan = ? WHERE no_pol = ?",
-      [nama_kendaraan, id_transmisi, gambar_kendaraan, no_pol],
-      (err, result) => {
+
+    const no_pol = req.params.no_pol;
+    const gambar = req.file ? req.file.filename : null;
+
+    connection.query(`SELECT * FROM kendaraan WHERE no_pol = ?`, [no_pol], function (err, rows) {
+      if (err) {
+        return res.status(500).json({
+          status: false,
+          message: "Server Error",
+        });
+      }
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          status: false,
+          message: "Not Found",
+        });
+      }
+
+      const namaFileLama = rows[0].gambar_kendaraan;
+
+      // Hapus file lama jika ada
+      if (namaFileLama && gambar) {
+        const pathFileLama = path.join(__dirname, "../public/img", namaFileLama);
+        fs.unlinkSync(pathFileLama);
+      }
+
+      let Data = {
+        nama_kendaraan: req.body.nama_kendaraan,
+        id_transmisi: req.body.id_transmisi,
+        gambar_kendaraan: gambar,
+      };
+
+      connection.query(`UPDATE kendaraan SET ? WHERE no_pol = ?`, [Data, no_pol], function (err, rows) {
         if (err) {
           return res.status(500).json({
             status: false,
             message: "Server Error",
           });
-        }
-  
-        if (result.affectedRows === 0) {
-          return res.status(404).json({
-            status: false,
-            message: "Kendaraan not found",
-          });
         } else {
           return res.status(200).json({
             status: true,
-            message: "Kendaraan berhasil diubah",
+            message: "Data Kendaraan Berhasil Diubah!",
           });
         }
-      }
-    );
-  });
+      });
+    });
+  }
+);
 
   router.get("/", (req, res) => {
     // Query ke database untuk mengambil semua data kendaraan
@@ -168,6 +193,31 @@ router.patch("/update/:no_pol", upload.single("gambar_kendaraan"), (req, res) =>
     );
   });
   
+  router.delete("/delete/:no_pol", (req, res) => {
+    const no_pol = req.params.no_pol;
+  
+    // Query ke database untuk menghapus data kendaraan berdasarkan nomor polisi
+    connection.query("DELETE FROM kendaraan WHERE no_pol = ?", [no_pol], function (err, result) {
+      if (err) {
+        return res.status(500).json({
+          status: false,
+          message: "Server Error",
+        });
+      }
+  
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          status: false,
+          message: "Kendaraan not found",
+        });
+      } else {
+        return res.status(200).json({
+          status: true,
+          message: "Kendaraan berhasil dihapus",
+        });
+      }
+    });
+  });
   
   
   
